@@ -96,6 +96,8 @@ func (m *Morton) CreateTables(dimensions uint8, length uint32, done chan<- bool)
 		m.Tables = append(m.Tables, *t)
 	}
 
+	close(ch)
+
 	sort.Sort(ByTable(m.Tables))
 
 	m.Magic = <-mch
@@ -108,7 +110,7 @@ func makeMagic(dimensions uint8, mch chan<- []uint64) {
 	d := uint64(dimensions)
 	limit := 64/d + 1
 	nth := []uint64{0, 0, 0, 0, 0}
-	for i := uint64(0); i < 64; i++ { // @TODO: Make this use unsafe.SizeOf() or somesuch;
+	for i := uint64(0); i < 64; i++ {
 		if i < limit {
 			nth[0] |= 1 << (i * (d))
 		}
@@ -120,6 +122,7 @@ func makeMagic(dimensions uint8, mch chan<- []uint64) {
 	}
 
 	mch <- nth
+	close(mch)
 }
 
 func (m *Morton) Decode(code uint64) (result []uint32) {
@@ -186,6 +189,8 @@ func createTable(index, dimensions uint8, length uint32, ch chan<- *Table) {
 		t.Encode = append(t.Encode, *ib)
 	}
 
+	close(bch)
+
 	sort.Sort(ByBit(t.Encode))
 
 	ch <- t
@@ -203,7 +208,6 @@ func interleaveBits(value, offset, spread uint32, bch chan<- *Bit) {
 
 	// Offset value for interleaving and reconcile types
 	v, o, s := uint64(value), uint64(offset), uint64(spread)
-	//v = v << o
 	for i := uint64(0); i < limit; i++ {
 		// Interleave bits, bit by bit.
 		ib.Value |= (v & (1 << i)) << (i * s)

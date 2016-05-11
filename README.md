@@ -27,4 +27,4 @@
 ## Whatever For?
   While there are many possible uses for Morton encoding, I originally wrote this as an adjunct to a voxelization project of mine (which I'll publish eventually).
 
-  Without getting into specifics that are out of scope here, this library is being used in that particular project to encode each nodes position. This saves a bunch of memory, as it reduces the original 3 unsigned integer coordinate to a single unsigned integer.
+  Without getting into specifics that are out of scope here, this library is being used in that particular project to encode the position of each node. This retains the coordinate information while saving a bunch of memory, as it reduces the original 3 unsigned integer coordinate to a single unsigned integer.

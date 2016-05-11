@@ -1,5 +1,8 @@
 /*
-Subtle Morton implements Z-Order Curve encoding and decoding.
+
+  Morton implements Z-Order Curve encoding and decoding for N-dimensions, using lookup tables and magic bits respectively.
+
+  In order to supply for N-dimensions, this library generates the magic bits used in decoding.  While this library does supply for N-dimensions, because this type of ordering uses bit interleaving for encoding it is limited by the width of the uint64 type divided by the number of dimensions (i.e., uint64/3 for 3 dimensions).
 
 */
 package morton
@@ -9,21 +12,6 @@ import (
 	"fmt"
 	"sort"
 )
-
-/*// Sort interface for Table slices
-type ByUint32Index []uint32
-
-func (u ByUint32Index) Len() int {
-	return len(u)
-}
-
-func (u ByUint32Index) Swap(i, j int) {
-	u[i], u[j] = u[j], u[i]
-}
-
-func (u ByUint32Index) Less(i, j int) bool {
-	return i < j
-}*/
 
 type Table struct {
 	Index  uint8

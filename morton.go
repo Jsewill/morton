@@ -19,7 +19,7 @@ type Table struct {
 	Encode []Bit
 }
 
-// Sort interface for Table slices
+// Sortable Table slice type to satisfy the sort package interface
 type ByTable []Table
 
 func (t ByTable) Len() int {
@@ -39,7 +39,7 @@ type Bit struct {
 	Value uint64
 }
 
-// Sort interface for Bit slices
+// Sortable Table slice type to satisfy the sort package interface
 type ByBit []Bit
 
 func (b ByBit) Len() int {

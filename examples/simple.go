@@ -13,7 +13,7 @@ import (
 func main() {
 	//Create a new Morton
 	m := new(morton.Morton)
-	//Generate Tables and Magic numbers
+	//Generate Tables and Magic bits
 	m.Create(3, 512)
 
 	//Create arbitrary coordinates

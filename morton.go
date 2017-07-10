@@ -60,6 +60,12 @@ type Morton struct {
 	Magic      []uint64
 }
 
+// Convenience function
+func NewMorton(dimensions uint8, size uint32) *Morton {
+	m := new(Morton)
+	return m.Create(dimensions, size)
+}
+
 func (m *Morton) Create(dimensions uint8, size uint32) {
 	table_ops := make(chan bool)
 	go m.CreateTables(dimensions, size, table_ops)

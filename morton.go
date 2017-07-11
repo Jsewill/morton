@@ -63,7 +63,8 @@ type Morton struct {
 // Convenience function
 func NewMorton(dimensions uint8, size uint32) *Morton {
 	m := new(Morton)
-	return m.Create(dimensions, size)
+	m.Create(dimensions, size)
+	return m
 }
 
 func (m *Morton) Create(dimensions uint8, size uint32) {

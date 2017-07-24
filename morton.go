@@ -69,7 +69,10 @@ func NewMorton(dimensions uint8, size uint32) *Morton {
 
 func (m *Morton) Create(dimensions uint8, size uint32) {
 	table_ops := make(chan bool)
+	mch := make(chan []uint64)
 	go m.CreateTables(dimensions, size, table_ops)
+	go MakeMagic(dimensions, mch)
+	m.Magic = <-mch
 	<-table_ops
 }
 
@@ -77,30 +80,20 @@ func (m *Morton) CreateTables(dimensions uint8, length uint32, done chan<- bool)
 	ch := make(chan *Table)
 
 	m.Dimensions = dimensions
-
 	for i := uint8(0); i < dimensions; i++ {
 		go createTable(i, dimensions, length, ch)
 	}
-
-	mch := make(chan []uint64)
-
-	go makeMagic(dimensions, mch)
-
 	for i := uint8(0); i < dimensions; i++ {
 		t := <-ch
 		m.Tables = append(m.Tables, *t)
 	}
-
 	close(ch)
 
 	sort.Sort(ByTable(m.Tables))
-
-	m.Magic = <-mch
-
 	done <- true
 }
 
-func makeMagic(dimensions uint8, mch chan<- []uint64) {
+func MakeMagic(dimensions uint8, mch chan<- []uint64) {
 	// Generate nth and ith bits variables
 	d := uint64(dimensions)
 	limit := 64/d + 1

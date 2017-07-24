@@ -6,7 +6,7 @@ Morton library example
 package main
 
 import (
-	"../"
+	".."
 	"fmt"
 )
 

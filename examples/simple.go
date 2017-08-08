@@ -20,7 +20,12 @@ func main() {
 	c := []uint32{5, 9, 1}
 
 	//Encode aforementioned coordinates
-	e, _ := m.Encode(c)
+	e, err := m.Encode(c)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	fmt.Println("Coordinates: ", c)
 	fmt.Println("Encoded Coordinates: ", e)

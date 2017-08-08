@@ -61,39 +61,47 @@ type Morton struct {
 }
 
 // Convenience function
-func NewMorton(dimensions uint8, size uint32) *Morton {
+func New(dimensions uint8, size uint32) *Morton {
 	m := new(Morton)
 	m.Create(dimensions, size)
 	return m
 }
 
 func (m *Morton) Create(dimensions uint8, size uint32) {
-	table_ops := make(chan bool)
+	done := make(chan struct{})
 	mch := make(chan []uint64)
-	go m.CreateTables(dimensions, size, table_ops)
-	go MakeMagic(dimensions, mch)
+	go func() {
+		m.CreateTables(dimensions, size)
+		done <- struct{}{}
+	}()
+	go func() {
+		mch <- MakeMagic(dimensions)
+	}()
 	m.Magic = <-mch
-	<-table_ops
+	close(mch)
+	<-done
+	close(done)
 }
 
-func (m *Morton) CreateTables(dimensions uint8, length uint32, done chan<- bool) {
-	ch := make(chan *Table)
+func (m *Morton) CreateTables(dimensions uint8, length uint32) {
+	ch := make(chan Table)
 
 	m.Dimensions = dimensions
 	for i := uint8(0); i < dimensions; i++ {
-		go createTable(i, dimensions, length, ch)
+		go func(i uint8) {
+			ch <- CreateTable(i, dimensions, length)
+		}(i)
 	}
 	for i := uint8(0); i < dimensions; i++ {
 		t := <-ch
-		m.Tables = append(m.Tables, *t)
+		m.Tables = append(m.Tables, t)
 	}
 	close(ch)
 
 	sort.Sort(ByTable(m.Tables))
-	done <- true
 }
 
-func MakeMagic(dimensions uint8, mch chan<- []uint64) {
+func MakeMagic(dimensions uint8) []uint64 {
 	// Generate nth and ith bits variables
 	d := uint64(dimensions)
 	limit := 64/d + 1
@@ -109,8 +117,7 @@ func MakeMagic(dimensions uint8, mch chan<- []uint64) {
 		nth[4] |= 0xffff << (i * (d << 4))
 	}
 
-	mch <- nth
-	close(mch)
+	return nth
 }
 
 func (m *Morton) Decode(code uint64) (result []uint32) {
@@ -162,31 +169,32 @@ func (m *Morton) Encode(vector []uint32) (result uint64, err error) {
 	return
 }
 
-func createTable(index, dimensions uint8, length uint32, ch chan<- *Table) {
-	t := &Table{Index: index, Length: length}
-	bch := make(chan *Bit)
+func CreateTable(index, dimensions uint8, length uint32) Table {
+	t := Table{Index: index, Length: length}
+	bch := make(chan Bit)
 
 	// Build interleave queue
 	for i := uint32(0); i < length; i++ {
-		go interleaveBits(i, uint32(index), uint32(dimensions-1), bch)
+		go func(i uint32) {
+			bch <- InterleaveBits(i, uint32(index), uint32(dimensions-1))
+		}(i)
 	}
-
 	// Pull from interleave queue
 	for i := uint32(0); i < length; i++ {
 		ib := <-bch
-		t.Encode = append(t.Encode, *ib)
+		t.Encode = append(t.Encode, ib)
 	}
-
 	close(bch)
 
 	sort.Sort(ByBit(t.Encode))
-
-	ch <- t
+	return t
 }
 
-func interleaveBits(value, offset, spread uint32, bch chan<- *Bit) {
-	ib := &Bit{value, 0}
+// Interleave bits of a uint32.
+func InterleaveBits(value, offset, spread uint32) Bit {
+	ib := Bit{value, 0}
 
+	// Determine the minimum number of single shifts required. There's likely a better, and more efficient, way to do this.
 	n := value
 	limit := uint64(0)
 	for i := uint32(0); n != 0; i++ {
@@ -202,5 +210,5 @@ func interleaveBits(value, offset, spread uint32, bch chan<- *Bit) {
 	}
 	ib.Value = ib.Value << o
 
-	bch <- ib
+	return ib
 }

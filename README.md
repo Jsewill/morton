@@ -25,6 +25,6 @@
   This library generates magic bits for decoding. This process uses several bitwise operations on the encoded number, using these generated magic bits. Like the lookup tables, the magic bits are concurrently generated
 
 ## Whatever For?
-  While there are many possible uses for Morton encoding, I originally wrote this as an adjunct to a voxelization project of mine (which I'll publish eventually).
+  While there are many possible uses for Morton encoding, I originally wrote this as an adjunct to a voxelization project of mine.
 
-  Without getting into specifics that are out of scope here, this library is being used in that particular project to encode the position of each node. This retains the coordinate information while saving a bunch of memory, as it reduces the original 3 unsigned integer coordinate to a single unsigned integer.
+  Without getting into specifics that are out of scope here, this library is being used in that particular project to encode the position of each node. This retains the coordinate information while saving a bunch of memory, as it reduces the original unsigned integer coordinate N-vector to a single unsigned integer.

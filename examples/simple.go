@@ -29,5 +29,6 @@ func main() {
 	}
 
 	fmt.Printf("Coordinates: %v\n", c)
+	fmt.Printf("Encoded Coordinates: %v\n", e)
 	fmt.Printf("Decoded Coordinates: %v\n", m.Decode(e))
 }

@@ -6,18 +6,19 @@ Morton library example
 package main
 
 import (
-	".."
 	"fmt"
+
+	"github.com/Jsewill/morton"
 )
 
 func main() {
 	//Create a new Morton
 	m := new(morton.Morton)
 	//Generate Tables and Magic bits
-	m.Create(3, 512)
+	m.Create(4, 512)
 
 	//Create arbitrary coordinates
-	c := []uint32{5, 9, 1}
+	c := []uint32{511, 472, 103, 7}
 
 	//Encode aforementioned coordinates
 	e, err := m.Encode(c)
@@ -27,7 +28,6 @@ func main() {
 		return
 	}
 
-	fmt.Println("Coordinates: ", c)
-	fmt.Println("Encoded Coordinates: ", e)
-	fmt.Println("Decoded Coordinates: ", m.Decode(e))
+	fmt.Printf("Coordinates: %v\n", c)
+	fmt.Printf("Decoded Coordinates: %v\n", m.Decode(e))
 }

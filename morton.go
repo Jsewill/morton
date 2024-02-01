@@ -19,6 +19,14 @@ type Table struct {
 	Encode []Bit
 }
 
+func (t Table) String() string {
+	var bits string
+	for _, b := range t.Encode {
+		bits = fmt.Sprintf("%v%v\n", bits, b)
+	}
+	return fmt.Sprintf("Index: %v\nLength: %v\n%v", t.Index, t.Length, bits)
+}
+
 // Sortable Table slice type to satisfy the sort package interface
 type ByTable []Table
 
@@ -37,6 +45,10 @@ func (t ByTable) Less(i, j int) bool {
 type Bit struct {
 	Index uint32
 	Value uint64
+}
+
+func (b Bit) String() string {
+	return fmt.Sprintf("[%v]%08b", b.Index, b.Value)
 }
 
 // Sortable Table slice type to satisfy the sort package interface
@@ -76,6 +88,7 @@ func (m *Morton) Create(dimensions uint8, size uint32) {
 	}()
 	go func() {
 		mch <- MakeMagic(dimensions)
+		m.Magic = MakeMagic(dimensions)
 	}()
 	m.Magic = <-mch
 	close(mch)
@@ -105,16 +118,34 @@ func MakeMagic(dimensions uint8) []uint64 {
 	// Generate nth and ith bits variables
 	d := uint64(dimensions)
 	limit := 64/d + 1
-	nth := []uint64{0, 0, 0, 0, 0}
-	for i := uint64(0); i < 64; i++ {
-		if i < limit {
-			nth[0] |= 1 << (i * (d))
-		}
+	nth := []uint64{0, 0, 0, 0, 0, 0}
+	for i := uint64(0); i < limit; i++ {
 
-		nth[1] |= 3 << (i * (d << 1))
-		nth[2] |= 0xf << (i * (d << 2))
-		nth[3] |= 0xff << (i * (d << 3))
-		nth[4] |= 0xffff << (i * (d << 4))
+		switch {
+		case i <= 32:
+			//32
+			nth[0] |= 1 << (i * d)
+			fallthrough
+		case i <= 16:
+			//16
+			nth[1] |= 3 << (i * (d << 1))
+			fallthrough
+		case i <= 8:
+			//8
+			nth[2] |= 0xf << (i * (d << 2))
+			fallthrough
+		case i <= 4:
+			//4
+			nth[3] |= 0xff << (i * (d << 3))
+			fallthrough
+		case i <= 2:
+			//2
+			nth[4] |= 0xffff << (i * (d << 4))
+			fallthrough
+		case i <= 1:
+			//1
+			nth[5] |= 0xffffff << (i * (d << 5))
+		}
 	}
 
 	return nth
@@ -131,11 +162,9 @@ func (m *Morton) Decode(code uint64) (result []uint32) {
 	// Process each dimension
 	for i := uint64(0); i < d; i++ {
 		r[i] = (code >> i) & m.Magic[0]
-
-		r[i] = (r[i] ^ (r[i] >> (1 << (d - 2)))) & m.Magic[1]
-		r[i] = (r[i] ^ (r[i] >> (2 << (d - 2)))) & m.Magic[2]
-		r[i] = (r[i] ^ (r[i] >> (4 << (d - 2)))) & m.Magic[3]
-		r[i] = (r[i] ^ (r[i] >> (8 << (d - 2)))) & m.Magic[4]
+		for j := uint64(0); int(j) < len(m.Magic)-1; j++ {
+			r[i] = (r[i] ^ (r[i] >> ((d - 1) * (1 << j)))) & m.Magic[j+1]
+		}
 
 		result = append(result, uint32(r[i]))
 	}

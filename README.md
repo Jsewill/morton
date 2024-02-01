@@ -1,7 +1,7 @@
 # Morton
   A Go library designed to implement N-dimensional coordinate encoding/decoding to/from Morton Order (Z-Order Curve).
 
-  What makes this library unique is its dynamic nature. It really is N-dimensional, only limited by type width (more on this later). It accomplishes this by generating its components at creation, rather than using static tables and hardcoded magic bits.
+  What makes this library unique is its dynamic nature. Currently, it supports 2, 3, and 4 dimensions. The ultimate goal is for this library to support as many dimensions can fit within the type width (more on this later). It accomplishes this by generating its components at creation, rather than using static tables and hardcoded magic bits.
 
 ## How Do I Use Morton?
   Please see the examples/ directory in this repository for a succinct and simple example of how to use this library.

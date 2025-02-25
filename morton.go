@@ -1,18 +1,18 @@
 /*
+Morton implements Z-Order Curve encoding and decoding for N-dimensions, using lookup tables and magic bits respectively.
 
-  Morton implements Z-Order Curve encoding and decoding for N-dimensions, using lookup tables and magic bits respectively.
-
-  In order to supply for N-dimensions, this library generates the magic bits used in decoding.  While this library does supply for N-dimensions, because this type of ordering uses bit interleaving for encoding it is limited by the width of the uint64 type divided by the number of dimensions (i.e., uint64/3 for 3 dimensions).
-
+In order to supply for N-dimensions, this library generates the magic bits used in decoding.  While this library does supply for N-dimensions, because this type of ordering uses bit interleaving for encoding it is limited by the width of the uint64 type divided by the number of dimensions (i.e., uint64/3 for 3 dimensions).
 */
 package morton
 
 import (
 	"errors"
 	"fmt"
+	_ "slices"
 	"sort"
 )
 
+// Represents a lookup table.
 type Table struct {
 	Index  uint8
 	Length uint32
@@ -27,7 +27,7 @@ func (t Table) String() string {
 	return fmt.Sprintf("Index: %v\nLength: %v\n%v", t.Index, t.Length, bits)
 }
 
-// Sortable Table slice type to satisfy the sort package interface
+// Sortable Table slice type to satisfy the sort package interface.
 type ByTable []Table
 
 func (t ByTable) Len() int {
@@ -42,6 +42,7 @@ func (t ByTable) Less(i, j int) bool {
 	return t[i].Index < t[j].Index
 }
 
+// Represents a lookup table bit.
 type Bit struct {
 	Index uint32
 	Value uint64
@@ -66,19 +67,21 @@ func (b ByBit) Less(i, j int) bool {
 	return b[i].Index < b[j].Index
 }
 
+// A type for working with Morton lookup tables, and subsequent encoding and decoding.
 type Morton struct {
 	Dimensions uint8
 	Tables     []Table
 	Magic      []uint64
 }
 
-// Convenience function
+// Convenience function for creating a new Morton.
 func New(dimensions uint8, size uint32) *Morton {
 	m := new(Morton)
 	m.Create(dimensions, size)
 	return m
 }
 
+// Manages the concurrent creation of lookup tables and magic bits.
 func (m *Morton) Create(dimensions uint8, size uint32) {
 	done := make(chan struct{})
 	mch := make(chan []uint64)
@@ -96,6 +99,7 @@ func (m *Morton) Create(dimensions uint8, size uint32) {
 	close(done)
 }
 
+// Creates lookup tables.
 func (m *Morton) CreateTables(dimensions uint8, length uint32) {
 	ch := make(chan Table)
 
@@ -114,6 +118,7 @@ func (m *Morton) CreateTables(dimensions uint8, length uint32) {
 	sort.Sort(ByTable(m.Tables))
 }
 
+// Makes magic bits.
 func MakeMagic(dimensions uint8) []uint64 {
 	// Generate nth and ith bits variables
 	d := uint64(dimensions)
@@ -151,6 +156,7 @@ func MakeMagic(dimensions uint8) []uint64 {
 	return nth
 }
 
+// Decodes a Morton number.
 func (m *Morton) Decode(code uint64) (result []uint32) {
 	if m.Dimensions == 0 {
 		return
@@ -172,6 +178,7 @@ func (m *Morton) Decode(code uint64) (result []uint32) {
 	return
 }
 
+// Encodes a Morton number via lookup tables.
 func (m *Morton) Encode(vector []uint32) (result uint64, err error) {
 	length := len(m.Tables)
 	if length == 0 {
@@ -198,6 +205,7 @@ func (m *Morton) Encode(vector []uint32) (result uint64, err error) {
 	return
 }
 
+// Creates a single lookup table.
 func CreateTable(index, dimensions uint8, length uint32) Table {
 	t := Table{Index: index, Length: length}
 	bch := make(chan Bit)
@@ -221,7 +229,7 @@ func CreateTable(index, dimensions uint8, length uint32) Table {
 
 // Interleave bits of a uint32.
 func InterleaveBits(value, offset, spread uint32) Bit {
-	ib := Bit{value, 0}
+	ib := Bit{Index: value, Value: 0}
 
 	// Determine the minimum number of single shifts required. There's likely a better, and more efficient, way to do this.
 	n := value
@@ -238,6 +246,20 @@ func InterleaveBits(value, offset, spread uint32) Bit {
 		ib.Value |= (v & (1 << i)) << (i * s)
 	}
 	ib.Value = ib.Value << o
+
+	return ib
+}
+
+// Interleave bits of a uint32 by magic. This function is a work in progress.
+func InterleaveBitsMagic(value, offset, spread uint32, magic []uint64) Bit {
+	ib := Bit{Index: value, Value: 0}
+
+	v, o, s := uint64(value)&magic[len(magic)-1], uint64(offset), uint64(spread)
+	for i := len(magic) - 2; i >= 0; i-- {
+		j := uint64(i)
+		v = (v ^ (v << ((s + 1) * (1 << (j - 1))))) & magic[j]
+	}
+	ib.Value = v << o
 
 	return ib
 }

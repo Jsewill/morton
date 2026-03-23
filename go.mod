@@ -1,3 +1,3 @@
 module github.com/Jsewill/morton
 
-go 1.21.6
+go 1.26.1

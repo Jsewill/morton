@@ -8,8 +8,8 @@ package morton
 import (
 	"errors"
 	"fmt"
-	_ "slices"
 	"sort"
+	"strings"
 )
 
 // Represents a lookup table.
@@ -20,11 +20,11 @@ type Table struct {
 }
 
 func (t Table) String() string {
-	var bits string
+	var sb strings.Builder
 	for _, b := range t.Encode {
-		bits = fmt.Sprintf("%v%v\n", bits, b)
+		fmt.Fprintf(&sb, "%v\n", b)
 	}
-	return fmt.Sprintf("Index: %v\nLength: %v\n%v", t.Index, t.Length, bits)
+	return fmt.Sprintf("Index: %v\nLength: %v\n%v", t.Index, t.Length, sb.String())
 }
 
 // Sortable Table slice type to satisfy the sort package interface.
@@ -84,17 +84,11 @@ func New(dimensions uint8, size uint32) *Morton {
 // Manages the concurrent creation of lookup tables and magic bits.
 func (m *Morton) Create(dimensions uint8, size uint32) {
 	done := make(chan struct{})
-	mch := make(chan []uint64)
 	go func() {
 		m.CreateTables(dimensions, size)
 		done <- struct{}{}
 	}()
-	go func() {
-		mch <- MakeMagic(dimensions)
-		m.Magic = MakeMagic(dimensions)
-	}()
-	m.Magic = <-mch
-	close(mch)
+	m.Magic = MakeMagic(dimensions)
 	<-done
 	close(done)
 }
@@ -158,7 +152,7 @@ func MakeMagic(dimensions uint8) []uint64 {
 
 // Decodes a Morton number.
 func (m *Morton) Decode(code uint64) (result []uint32) {
-	if m.Dimensions == 0 {
+	if m.Dimensions == 0 || len(m.Magic) == 0 {
 		return
 	}
 
@@ -182,20 +176,18 @@ func (m *Morton) Decode(code uint64) (result []uint32) {
 func (m *Morton) Encode(vector []uint32) (result uint64, err error) {
 	length := len(m.Tables)
 	if length == 0 {
-		err = errors.New("No lookup tables.  Please generate them via CreateTables().")
+		err = errors.New("no lookup tables, please generate them via CreateTables()")
 		return
 	}
 
 	if len(vector) > length {
-		err = errors.New("Input vector slice length exceeds the number of lookup tables.  Please regenerate them via CreateTables()")
+		err = errors.New("input vector slice length exceeds the number of lookup tables, please regenerate them via CreateTables()")
 		return
 	}
 
-	//sort.Sort(sort.Reverse(ByUint32Index(vector)))
-
 	for k, v := range vector {
 		if v > uint32(len(m.Tables[k].Encode)-1) {
-			err = errors.New(fmt.Sprint("Input vector component, ", k, " length exceeds the corresponding lookup table's size.  Please regenerate them via CreateTables() and specify the appropriate table length"))
+			err = errors.New(fmt.Sprint("input vector component, ", k, " length exceeds the corresponding lookup table's size, please regenerate them via CreateTables() and specify the appropriate table length"))
 			return
 		}
 
@@ -209,11 +201,12 @@ func (m *Morton) Encode(vector []uint32) (result uint64, err error) {
 func CreateTable(index, dimensions uint8, length uint32) Table {
 	t := Table{Index: index, Length: length}
 	bch := make(chan Bit)
+	magic := MakeMagic(dimensions)
 
 	// Build interleave queue
 	for i := uint32(0); i < length; i++ {
 		go func(i uint32) {
-			bch <- InterleaveBits(i, uint32(index), uint32(dimensions-1))
+			bch <- InterleaveBitsMagic(i, uint32(index), uint32(dimensions-1), magic)
 		}(i)
 	}
 	// Pull from interleave queue
@@ -250,14 +243,14 @@ func InterleaveBits(value, offset, spread uint32) Bit {
 	return ib
 }
 
-// Interleave bits of a uint32 by magic. This function is a work in progress.
+// Interleave bits of a uint32 by magic.
 func InterleaveBitsMagic(value, offset, spread uint32, magic []uint64) Bit {
 	ib := Bit{Index: value, Value: 0}
 
 	v, o, s := uint64(value)&magic[len(magic)-1], uint64(offset), uint64(spread)
 	for i := len(magic) - 2; i >= 0; i-- {
 		j := uint64(i)
-		v = (v ^ (v << ((s + 1) * (1 << (j - 1))))) & magic[j]
+		v = (v ^ (v << (s * (1 << j)))) & magic[j]
 	}
 	ib.Value = v << o
 

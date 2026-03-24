@@ -17,12 +17,12 @@
 
   Therefore, encoding an N-dimensional coordinate can have a compressive effect, where N > 1.
 
-  This library generates lookup tables for use in encoding. These lookup tables are concurrently generated.
+  This library generates lookup tables for use in encoding.
 
 ### Decoding
   An encoded Z-value 0b000000001 can be decoded to reveal its N-dimensional coordinate components, which you may have guessed, is {1, n2, ..., n9}.
 
-  This library generates magic bits for decoding. This process uses several bitwise operations on the encoded number, using these generated magic bits. Like the lookup tables, the magic bits are concurrently generated
+  This library generates magic bits for decoding. This process uses several bitwise operations on the encoded number, using these generated magic bits.
 
 ## Whatever For?
   While there are many possible uses for Morton encoding, I originally wrote this as an adjunct to a voxelization project of mine.

@@ -183,8 +183,8 @@ func TestNewConvenience(t *testing.T) {
 	if m.Dimensions != 3 {
 		t.Errorf("New dimensions = %d, want 3", m.Dimensions)
 	}
-	if len(m.Tables) != 3 {
-		t.Errorf("New tables count = %d, want 3", len(m.Tables))
+	if len(m.Table) != 3*16 {
+		t.Errorf("New table length = %d, want %d", len(m.Table), 3*16)
 	}
 	if len(m.Magic) == 0 {
 		t.Error("New magic is empty")
@@ -196,15 +196,6 @@ func TestMakeMagicLength(t *testing.T) {
 		magic := MakeMagic(d)
 		if len(magic) != 6 {
 			t.Errorf("MakeMagic(%d) length = %d, want 6", d, len(magic))
-		}
-	}
-}
-
-func TestTableSorting(t *testing.T) {
-	m := New(3, 8)
-	for i := 0; i < len(m.Tables)-1; i++ {
-		if m.Tables[i].Index >= m.Tables[i+1].Index {
-			t.Errorf("tables not sorted: index %d >= %d", m.Tables[i].Index, m.Tables[i+1].Index)
 		}
 	}
 }
@@ -232,14 +223,24 @@ func TestInterleaveBitsVsMagic(t *testing.T) {
 					got := InterleaveBits(v, offset, spread)
 					gotMagic := InterleaveBitsMagic(v, offset, spread, magic)
 
-					if got.Value != gotMagic.Value {
+					if got != gotMagic {
 						t.Errorf("value=%d offset=%d spread=%d:\n  InterleaveBits:      %064b\n  InterleaveBitsMagic: %064b",
-							v, offset, spread, got.Value, gotMagic.Value)
+							v, offset, spread, got, gotMagic)
 					} else {
 						t.Logf("value=%d offset=%d spread=%d: MATCH %064b",
-							v, offset, spread, got.Value)
+							v, offset, spread, got)
 					}
 				}
+			}
+		})
+	}
+}
+
+func BenchmarkNew(b *testing.B) {
+	for _, dims := range []uint8{2, 3, 4, 5, 6} {
+		b.Run(fmt.Sprintf("%dD", dims), func(b *testing.B) {
+			for b.Loop() {
+				New(dims, 1024)
 			}
 		})
 	}
@@ -278,6 +279,23 @@ func BenchmarkEncode(b *testing.B) {
 		b.Run(fmt.Sprintf("%dD", dims), func(b *testing.B) {
 			for b.Loop() {
 				m.Encode(coords)
+			}
+		})
+	}
+}
+
+func BenchmarkDecodeInto(b *testing.B) {
+	for _, dims := range []uint8{2, 3, 4, 5, 6} {
+		m := New(dims, 1024)
+		coords := make([]uint32, dims)
+		for i := range coords {
+			coords[i] = 42
+		}
+		code, _ := m.Encode(coords)
+		result := make([]uint32, dims)
+		b.Run(fmt.Sprintf("%dD", dims), func(b *testing.B) {
+			for b.Loop() {
+				m.DecodeInto(code, result)
 			}
 		})
 	}

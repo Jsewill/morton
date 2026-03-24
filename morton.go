@@ -8,70 +8,14 @@ package morton
 import (
 	"errors"
 	"fmt"
-	"sort"
-	"strings"
 )
-
-// Represents a lookup table.
-type Table struct {
-	Index  uint8
-	Length uint32
-	Encode []Bit
-}
-
-func (t Table) String() string {
-	var sb strings.Builder
-	for _, b := range t.Encode {
-		fmt.Fprintf(&sb, "%v\n", b)
-	}
-	return fmt.Sprintf("Index: %v\nLength: %v\n%v", t.Index, t.Length, sb.String())
-}
-
-// Sortable Table slice type to satisfy the sort package interface.
-type ByTable []Table
-
-func (t ByTable) Len() int {
-	return len(t)
-}
-
-func (t ByTable) Swap(i, j int) {
-	t[i], t[j] = t[j], t[i]
-}
-
-func (t ByTable) Less(i, j int) bool {
-	return t[i].Index < t[j].Index
-}
-
-// Represents a lookup table bit.
-type Bit struct {
-	Index uint32
-	Value uint64
-}
-
-func (b Bit) String() string {
-	return fmt.Sprintf("[%v]%08b", b.Index, b.Value)
-}
-
-// Sortable Table slice type to satisfy the sort package interface
-type ByBit []Bit
-
-func (b ByBit) Len() int {
-	return len(b)
-}
-
-func (b ByBit) Swap(i, j int) {
-	b[i], b[j] = b[j], b[i]
-}
-
-func (b ByBit) Less(i, j int) bool {
-	return b[i].Index < b[j].Index
-}
 
 // A type for working with Morton lookup tables, and subsequent encoding and decoding.
 type Morton struct {
 	Dimensions uint8
-	Tables     []Table
+	Table      []uint64 // flat lookup: Table[dim*tableSize + val]
 	Magic      []uint64
+	tableSize  uint32
 }
 
 // Convenience function for creating a new Morton.
@@ -81,35 +25,23 @@ func New(dimensions uint8, size uint32) *Morton {
 	return m
 }
 
-// Manages the concurrent creation of lookup tables and magic bits.
+// Creates lookup table and magic bits.
 func (m *Morton) Create(dimensions uint8, size uint32) {
-	done := make(chan struct{})
-	go func() {
-		m.CreateTables(dimensions, size)
-		done <- struct{}{}
-	}()
-	m.Magic = MakeMagic(dimensions)
-	<-done
-	close(done)
+	m.CreateTable(dimensions, size)
 }
 
-// Creates lookup tables.
-func (m *Morton) CreateTables(dimensions uint8, length uint32) {
-	ch := make(chan Table)
-
+// Creates the flat lookup table.
+func (m *Morton) CreateTable(dimensions uint8, length uint32) {
 	m.Dimensions = dimensions
+	m.Magic = MakeMagic(dimensions)
+	m.tableSize = length
+	m.Table = make([]uint64, uint32(dimensions)*length)
 	for i := uint8(0); i < dimensions; i++ {
-		go func(i uint8) {
-			ch <- CreateTable(i, dimensions, length)
-		}(i)
+		start := uint32(i) * length
+		for j := uint32(0); j < length; j++ {
+			m.Table[start+j] = InterleaveBitsMagic(j, uint32(i), uint32(dimensions-1), m.Magic)
+		}
 	}
-	for i := uint8(0); i < dimensions; i++ {
-		t := <-ch
-		m.Tables = append(m.Tables, t)
-	}
-	close(ch)
-
-	sort.Sort(ByTable(m.Tables))
 }
 
 // Makes magic bits.
@@ -151,78 +83,57 @@ func MakeMagic(dimensions uint8) []uint64 {
 }
 
 // Decodes a Morton number.
-func (m *Morton) Decode(code uint64) (result []uint32) {
+func (m *Morton) Decode(code uint64) []uint32 {
+	if m.Dimensions == 0 || len(m.Magic) == 0 {
+		return nil
+	}
+	result := make([]uint32, m.Dimensions)
+	m.DecodeInto(code, result)
+	return result
+}
+
+// Decodes a Morton number into a caller-provided buffer (zero allocations).
+func (m *Morton) DecodeInto(code uint64, result []uint32) {
 	if m.Dimensions == 0 || len(m.Magic) == 0 {
 		return
 	}
-
 	d := uint64(m.Dimensions)
-	r := make([]uint64, d)
-
-	// Process each dimension
 	for i := uint64(0); i < d; i++ {
-		r[i] = (code >> i) & m.Magic[0]
-		for j := uint64(0); int(j) < len(m.Magic)-1; j++ {
-			r[i] = (r[i] ^ (r[i] >> ((d - 1) * (1 << j)))) & m.Magic[j+1]
+		r := (code >> i) & m.Magic[0]
+		for j := 0; j < len(m.Magic)-1; j++ {
+			r = (r ^ (r >> ((d - 1) * (1 << uint64(j))))) & m.Magic[j+1]
 		}
-
-		result = append(result, uint32(r[i]))
+		result[i] = uint32(r)
 	}
-
-	return
 }
 
 // Encodes a Morton number via lookup tables.
 func (m *Morton) Encode(vector []uint32) (result uint64, err error) {
-	length := len(m.Tables)
-	if length == 0 {
-		err = errors.New("no lookup tables, please generate them via CreateTables()")
+	if m.tableSize == 0 {
+		err = errors.New("no lookup table, please generate one via CreateTable()")
 		return
 	}
 
-	if len(vector) > length {
-		err = errors.New("input vector slice length exceeds the number of lookup tables, please regenerate them via CreateTables()")
+	if len(vector) > int(m.Dimensions) {
+		err = errors.New("input vector slice length exceeds the number of dimensions, please regenerate via CreateTable()")
 		return
 	}
 
 	for k, v := range vector {
-		if v > uint32(len(m.Tables[k].Encode)-1) {
-			err = errors.New(fmt.Sprint("input vector component, ", k, " length exceeds the corresponding lookup table's size, please regenerate them via CreateTables() and specify the appropriate table length"))
+		if v >= m.tableSize {
+			err = errors.New(fmt.Sprint("input vector component, ", k, " length exceeds the lookup table's size, please regenerate via CreateTable() and specify the appropriate table length"))
 			return
 		}
 
-		result |= m.Tables[k].Encode[v].Value
+		result |= m.Table[uint32(k)*m.tableSize+v]
 	}
 
 	return
 }
 
-// Creates a single lookup table.
-func CreateTable(index, dimensions uint8, length uint32) Table {
-	t := Table{Index: index, Length: length}
-	bch := make(chan Bit)
-	magic := MakeMagic(dimensions)
-
-	// Build interleave queue
-	for i := uint32(0); i < length; i++ {
-		go func(i uint32) {
-			bch <- InterleaveBitsMagic(i, uint32(index), uint32(dimensions-1), magic)
-		}(i)
-	}
-	// Pull from interleave queue
-	for i := uint32(0); i < length; i++ {
-		ib := <-bch
-		t.Encode = append(t.Encode, ib)
-	}
-	close(bch)
-
-	sort.Sort(ByBit(t.Encode))
-	return t
-}
-
 // Interleave bits of a uint32.
-func InterleaveBits(value, offset, spread uint32) Bit {
-	ib := Bit{Index: value, Value: 0}
+func InterleaveBits(value, offset, spread uint32) uint64 {
+	var result uint64
 
 	// Determine the minimum number of single shifts required. There's likely a better, and more efficient, way to do this.
 	n := value
@@ -236,23 +147,19 @@ func InterleaveBits(value, offset, spread uint32) Bit {
 	v, o, s := uint64(value), uint64(offset), uint64(spread)
 	for i := uint64(0); i < limit; i++ {
 		// Interleave bits, bit by bit.
-		ib.Value |= (v & (1 << i)) << (i * s)
+		result |= (v & (1 << i)) << (i * s)
 	}
-	ib.Value = ib.Value << o
+	result = result << o
 
-	return ib
+	return result
 }
 
 // Interleave bits of a uint32 by magic.
-func InterleaveBitsMagic(value, offset, spread uint32, magic []uint64) Bit {
-	ib := Bit{Index: value, Value: 0}
-
+func InterleaveBitsMagic(value, offset, spread uint32, magic []uint64) uint64 {
 	v, o, s := uint64(value)&magic[len(magic)-1], uint64(offset), uint64(spread)
 	for i := len(magic) - 2; i >= 0; i-- {
 		j := uint64(i)
 		v = (v ^ (v << (s * (1 << j)))) & magic[j]
 	}
-	ib.Value = v << o
-
-	return ib
+	return v << o
 }
